@@ -11,6 +11,8 @@ import {
   FlatListProps,
   LayoutChangeEvent,
   InteractionManager,
+  Platform,
+  StyleSheet,
 } from "react-native";
 import {
   FlatList,
@@ -366,6 +368,33 @@ function DraggableFlatListInner<T>(props: DraggableFlatListProps<T>) {
     props.onViewableItemsChanged?.(info);
   });
 
+  // RN Android는 FlatList.contentInset을 무시한다(iOS 전용). contentInset을 크로스플랫폼으로
+  // 동작시키기 위해, Android에서는 contentContainerStyle 패딩으로 변환해 동일하게 스택한다.
+  // (iOS는 네이티브 contentInset을 그대로 사용)
+  const isAndroid = Platform.OS === "android";
+  const resolvedContentInset = isAndroid ? undefined : props.contentInset;
+  const resolvedContentContainerStyle = useMemo(() => {
+    if (!isAndroid || !props.contentInset) return props.contentContainerStyle;
+    const inset = props.contentInset;
+    const base = StyleSheet.flatten(props.contentContainerStyle) || {};
+    // 숫자 패딩만 처리(퍼센트 문자열은 0으로 간주). specific > axis > shorthand 순으로 base를 해석한 뒤 inset을 더한다.
+    const edge = (specific: unknown, axis: unknown, all: unknown) => {
+      if (typeof specific === "number") return specific;
+      if (typeof axis === "number") return axis;
+      if (typeof all === "number") return all;
+      return 0;
+    };
+    return {
+      ...base,
+      paddingTop: edge(base.paddingTop, base.paddingVertical, base.padding) + (inset.top || 0),
+      paddingBottom:
+        edge(base.paddingBottom, base.paddingVertical, base.padding) + (inset.bottom || 0),
+      paddingLeft: edge(base.paddingLeft, base.paddingHorizontal, base.padding) + (inset.left || 0),
+      paddingRight:
+        edge(base.paddingRight, base.paddingHorizontal, base.padding) + (inset.right || 0),
+    };
+  }, [isAndroid, props.contentInset, props.contentContainerStyle]);
+
   return (
     <DraggableFlatListProvider
       activeKey={activeKey}
@@ -397,6 +426,8 @@ function DraggableFlatListInner<T>(props: DraggableFlatListProps<T>) {
             scrollEventThrottle={16}
             simultaneousHandlers={props.simultaneousHandlers}
             removeClippedSubviews={false}
+            contentInset={resolvedContentInset}
+            contentContainerStyle={resolvedContentContainerStyle}
           />
           {!!props.onScrollOffsetChange && (
             <ScrollOffsetListener
