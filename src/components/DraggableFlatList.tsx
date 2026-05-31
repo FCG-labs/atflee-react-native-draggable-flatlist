@@ -377,9 +377,14 @@ function DraggableFlatListInner<T>(props: DraggableFlatListProps<T>) {
   const isAndroid = Platform.OS === "android";
   const resolvedContentInset = isAndroid ? undefined : props.contentInset;
   const resolvedContentContainerStyle = useMemo(() => {
-    if (!isAndroid || !props.contentInset) return props.contentContainerStyle;
-    const inset = props.contentInset;
+    // iOS는 consumer 스타일 그대로 전달.
+    if (!isAndroid) return props.contentContainerStyle;
+    // Android는 inset 유무와 무관하게 "항상 단일 flatten 객체"로 통일한다.
+    // shape이 배열↔객체로 토글되면 Fabric(SurfaceMountingManager)가 콘텐츠 컨테이너를
+    // 재생성하면서 ListFooterComponent 토글과 겹쳐 child-count mismatch 크래시를 유발한다.
     const base = StyleSheet.flatten(props.contentContainerStyle) || {};
+    // inset 없을 때도 4개 padding 키를 항상 포함시키기 위해 0 기본값 사용 → 객체 키 집합 불변.
+    const inset = props.contentInset || { top: 0, bottom: 0, left: 0, right: 0 };
     // 숫자 패딩만 처리(퍼센트 문자열은 0으로 간주). specific > axis > shorthand 순으로 base를 해석한 뒤 inset을 더한다.
     const edge = (specific: unknown, axis: unknown, all: unknown) => {
       if (typeof specific === "number") return specific;
